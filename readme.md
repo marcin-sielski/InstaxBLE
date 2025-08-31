@@ -30,15 +30,15 @@ Do you have an older **WIFI** printer instead? Try [Instax-api](https://github.c
 ### Image sizes accepted by the printers
 The image send to the printer should be a JPEG at a specific image size, depending on the printer model. This script will automatically convert, resize and reduce quality to match the required specifications. This will work fine for most images, but if you want to prepare them manually you can use the info below:
 
-| Model | Image size | File size |
-| --- | --- | --- |
-| Instax Mini Link | 600 x 800px | 105KB |
-| Instax Mini Link 2 | 600 x 800px (a guess) | " |
-| Instax Mini LiPlay | 600 x 800px (a guess) | " |
-| Instax Square Link | 800 x 800px | " |
-| Instax Wide Link | 1260 x 840px | " |
-| Instax Mini Evo | 600 x 800px (a guess) | " |
-| Instax Wide Evo | 1260 x 840px | " |
+| Model | Image size |
+| --- | --- |
+| Instax Mini Link | 600 x 800px |
+| Instax Mini Link 2 | 600 x 800px (a guess) |
+| Instax Mini LiPlay | 600 x 800px (a guess) |
+| Instax Square Link | 800 x 800px |
+| Instax Wide Link | 1260 x 840px |
+| Instax Mini Evo | 600 x 800px (a guess) |
+| Instax Wide Evo | 1260 x 840px |
 
 ### Installing and running
 
