@@ -1,6 +1,7 @@
 MIT License
 
 Copyright (c) 2023 Jasper van Loenen
+
 Copyright (c) 2025 Marcin Sielski
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
