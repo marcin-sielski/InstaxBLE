@@ -65,6 +65,7 @@ class InstaxBLE:
         self.cancelled = False
         self.lock = Lock()
         self.packets = 0
+        self.fileSize = 0
 
         adapters = simplepyble.Adapter.get_adapters()
         if len(adapters) == 0:
@@ -136,6 +137,7 @@ class InstaxBLE:
                     exit(f'Unknown image size from printer: {w}x{h}')
 
                 self.chunkSize = self.printerSettings['chunkSize']
+                self.fileSize = int(float(unpack_from('>I',packet[14:18])[0])/1024)
 
             elif infoType == InfoType.BATTERY_INFO:
                 self.batteryState, self.batteryPercentage = unpack_from('>BB', packet[8:10])
@@ -391,11 +393,11 @@ class InstaxBLE:
         imgData = imgSrc
         if isinstance(imgSrc, str):  # if it's a path, load the image contents
             image = Image.open(imgSrc)
-            imgData = self.pil_image_to_bytes(image, max_size_kb=105)
+            imgData = self.pil_image_to_bytes(image, max_size_kb=self.fileSize)
         elif isinstance(imgSrc, BytesIO):
             imgSrc.seek(0)  # Go to the start of the BytesIO object
             image = Image.open(imgSrc)
-            imgData = self.pil_image_to_bytes(image, max_size_kb=105)
+            imgData = self.pil_image_to_bytes(image, max_size_kb=self.fileSize)
 
         # self.log(f"len of imagedata: {len(imgData)}")
         self.packetsForPrinting = [
@@ -483,6 +485,7 @@ class InstaxBLE:
         img = img.resize(self.imageSize, Image.Resampling.LANCZOS)
 
         def save_img_with_quality(quality):
+            img_buffer.truncate(0)
             img_buffer.seek(0)
             img.save(img_buffer, format='JPEG', quality=quality)
             return img_buffer.tell() / 1024

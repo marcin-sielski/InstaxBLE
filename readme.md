@@ -64,7 +64,7 @@ By default the `instax.print_image()` method will send all data to the printer _
     instax.connect()
     instax.enable_printing()  # allow printing
     instax.print_image('image.jpg')  # print image
-    instax.wait_one_minute()  # hacky way of preventing disconnecting too soon
+    instax.wait_until_image_is_printed()
     instax.disconnect()  # all done, disconnect
 
 or
@@ -72,7 +72,7 @@ or
     instax = InstaxBLE(print_enabled=True)  # enable printing at initialization
     instax.connect()
     instax.print_image('image.jpg')  # print image
-    instax.wait_one_minute()  # hacky way of preventing disconnecting too soon
+    instax.wait_until_image_is_printed()
     instax.disconnect()  # all done, disconnect
 
 #### 2. Connecting to a specific printer
@@ -95,7 +95,7 @@ It's recommended to wrap your code inside a `try / except / finally` loop so you
             instax.connect()
             instax.enable_printing()
             instax.print_image('image.jpg')
-            instax.wait_one_minute()
+            instax.wait_until_image_is_printed()
         except Exception as e:
             print(e)
         finally:
@@ -128,11 +128,10 @@ Some of these options have already been explored in other branches, but I need t
 #### Image enhancements:
 I'm not sure what happens when you send a different filetype or image in landscape orientation, but assuming those will fail:
 - :heavy_check_mark: Resize if image too small or too large (actual size depending on printer model)
-- :heavy_check_mark: Resize if file size too large (max 65535 bytes)
 - :white_large_square: Auto rotate image to portrait before sending
 - :heavy_check_mark: Convert to jpg if given a different filetype
 - :heavy_check_mark: Strip exif data to decrease filesize
-- :heavy_check_mark: Automatically lower the quality of the image to keep images below the ~~65535 bytes (0xFF 0xFF)~~ 105KB file limit
+- :heavy_check_mark: Automatically lower the quality of the image to keep images below supported file size limit
 
 
 #### Credit
