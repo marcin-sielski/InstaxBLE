@@ -20,13 +20,14 @@ import simplepyble
 import sys
 from PIL import Image
 from io import BytesIO
-
+from threading import Lock
 
 class InstaxBLE:
     def __init__(
         self,
-        device_address=None,
-        device_name=None,
+        adapter=None,
+        mac_address=None,
+        name=None,
         print_enabled=False,
         dummy_printer=False,
         verbose=False,
@@ -48,8 +49,9 @@ class InstaxBLE:
         self.printerSettings = PrinterSettings['mini'] if self.dummyPrinter else None
         self.chunkSize = PrinterSettings['mini']['chunkSize'] if self.dummyPrinter else 0
         self.printEnabled = print_enabled
-        self.deviceName = device_name.upper() if device_name else None
-        self.deviceAddress = device_address.upper() if device_address else None
+        self.device = adapter.lower() if adapter else None
+        self.deviceName = name.upper() if name else None
+        self.deviceAddress = mac_address.upper() if mac_address else None
         self.image_path = image_path
         self.verbose = verbose if not self.quiet else False
         self.packetsForPrinting = []
@@ -61,6 +63,8 @@ class InstaxBLE:
         self.imageSize = (PrinterSettings['mini']['width'], PrinterSettings['mini']['height']) if self.dummyPrinter else (0, 0)
         self.waitingForResponse = False
         self.cancelled = False
+        self.lock = Lock()
+        self.packets = 0
 
         adapters = simplepyble.Adapter.get_adapters()
         if len(adapters) == 0:
@@ -69,10 +73,18 @@ class InstaxBLE:
             else:
                 sys.exit()
 
+        number = 0
         if len(adapters) > 1:
             self.log(f"Found multiple adapters: {', '.join([adapter.identifier() for adapter in adapters])}")
-            self.log(f"Using the first one: {adapters[0].identifier()}")
-        self.adapter = adapters[0]
+            if self.device is None:
+                self.log(f"Using the first one: {adapters[0].identifier()}")
+            else:
+                for i in range(len(adapters)):
+                    if adapters[i].identifier() == self.device:
+                        number = i
+                        break
+                self.log(f"Using: {adapters[number].identifier()}")
+        self.adapter = adapters[number]
 
     def log(self, msg):
         """ Print a debug message"""
@@ -148,11 +160,11 @@ class InstaxBLE:
             self.handle_image_packet_queue()
 
         elif event == EventType.PRINT_IMAGE_DOWNLOAD_CANCEL:
-            pass
+            self.lock.release()
 
         elif event == EventType.PRINT_IMAGE:
             self.log('received print confirmation')
-            pass
+            self.lock.release()
 
         else:
             self.log(f'Uncaught response from printer. Eventype: {event}')
@@ -161,6 +173,8 @@ class InstaxBLE:
         if len(self.packetsForPrinting) > 0 and not self.cancelled:
             if len(self.packetsForPrinting) % 10 == 0:
                 self.log(f"Img packets left to send: {len(self.packetsForPrinting)}")
+                sys.stdout.write("Printing progress: %d%%   \r" % ((self.packets-len(self.packetsForPrinting))*100/self.packets))
+                sys.stdout.flush()
             packet = self.packetsForPrinting.pop(0)
             self.send_packet(packet)
 
@@ -236,6 +250,7 @@ class InstaxBLE:
 
     def cancel_print(self):
         self.packetsForPrinting = []
+        self.packets = 0
         self.waitingForResponse = False
         self.send_packet(self.create_packet(EventType.PRINT_IMAGE_DOWNLOAD_CANCEL))
 
@@ -263,7 +278,8 @@ class InstaxBLE:
                     if (self.deviceName and foundName.startswith(self.deviceName)) or \
                        (self.deviceAddress and foundAddress == self.deviceAddress) or \
                        (self.deviceName is None and self.deviceAddress is None and
-                       foundName.startswith('INSTAX-') and foundName.endswith('(IOS)')):
+                       foundName.startswith('INSTAX-') and (foundName.endswith('(IOS)') or \
+                       foundName.endswith('(BLE)'))):
                         # if foundAddress.startswith('FA:AB:BC'):  # start of IOS endpooint
                         #     to convert to ANDROID endpoint, replace 'FA:AB:BC' with '88:B4:36')
                         if peripheral.is_connectable():
@@ -293,6 +309,8 @@ class InstaxBLE:
             speed: time per frame/color: higher is slower animation
             repeat: 0 = don't repeat (so play once), 1-254 = times to repeat, 255 = repeat forever
             when: 0 = normal, 1 = on print, 2 = on print completion, 3 = pattern switch """
+        if self.peripheral.identifier().endswith('(BLE)'):
+            return
         payload = self.create_color_payload(pattern, speed, repeat, when)
         packet = self.create_packet(EventType.LED_PATTERN_SETTINGS, payload)
         self.send_packet(packet)
@@ -406,8 +424,10 @@ class InstaxBLE:
         #     self.log(self.prettify_bytearray(packet))
         # exit()
         # send the first packet from our list, the packet handler will take care of the rest
+        self.packets = len(self.packetsForPrinting)
         if not self.dummyPrinter:
             packet = self.packetsForPrinting.pop(0)
+            self.lock.acquire()
             self.send_packet(packet)
             # try:
             #     while len(self.packetsForPrinting) > 0:
@@ -497,11 +517,15 @@ class InstaxBLE:
 
         return bytearray(img_buffer.getvalue())
 
-    def wait_one_minute(self):
-        """ Wait for one minute. Hacky way of preventing disconnecting too soon """
+    def wait_until_image_is_printed(self):
+        """ Wait until image is printed  """
         if not self.quiet:
-            print("Waiting for one minute...")
-        sleep(60)
+            print("Waiting until image is printed...")
+        if not self.dummyPrinter:
+            try:
+                self.lock.acquire()
+            except KeyboardInterrupt:
+                self.lock.release()
 
 
 def main(args={}):
@@ -531,7 +555,7 @@ def main(args={}):
             instax.print_image(instax.image_path)
         else:
             instax.print_image(instax.printerSettings['exampleImage'])
-        instax.wait_one_minute()
+        instax.wait_until_image_is_printed()
 
     except Exception as e:
         print(type(e).__name__, __file__, e.__traceback__.tb_lineno)
@@ -543,8 +567,9 @@ def main(args={}):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('-a', '--device-address')
-    parser.add_argument('-n', '--device-name')
+    parser.add_argument('-a', '--adapter')
+    parser.add_argument('-m', '--mac-address')
+    parser.add_argument('-n', '--name')
     parser.add_argument('-p', '--print-enabled', action='store_true')
     parser.add_argument('-d', '--dummy-printer', action='store_true')
     parser.add_argument('-v', '--verbose', action='store_true')

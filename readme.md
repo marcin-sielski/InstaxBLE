@@ -1,17 +1,10 @@
 # Instax-BLE
 
-<img align="right" style="margin:10px" src="https://github.com/javl/Instax-Bluetooth/blob/main/instax-bluetooth.gif?raw=true">
+<img align="right" style="margin:10px" src="https://github.com/marcin-sielski/Instax-Bluetooth/blob/main/instax-bluetooth.gif?raw=true">
 
 ## Control your Instax Link printer from Python
 
 This module can be used to control your Instax bluetooth printer (**Mini**, **Square** and **Wide**) from Python. Create an issue if you run into any trouble, but please read the rest of this readme first.
-
-Did you find this script useful? Feel free to support my open source software:
-
-[![GitHub Sponsor](https://img.shields.io/github/sponsors/javl?label=Sponsor&logo=GitHub)](https://github.com/sponsors/javl)
-
-[![BMC](https://www.buymeacoffee.com/assets/img/custom_images/white_img.png)](https://www.buymeacoffee.com/javl)
-
 
 Don't need a whole Python script and just want to print? [This website](https://instax-link-web.vercel.app/) based on InstaxBLE lets you print to your Instax printer straight from your browser (repo [over here](https://github.com/linssenste/instax-link-web)).
 
@@ -29,7 +22,9 @@ Do you have an older **WIFI** printer instead? Try [Instax-api](https://github.c
 | Instax Mini Link 2 | :white_circle: |
 | Instax Mini LiPlay | :heavy_check_mark: |
 | Instax Square Link | :heavy_check_mark: |
-| Instax Square Wide | :heavy_check_mark: |
+| Instax Wide Link | :heavy_check_mark: |
+| Instax Mini Evo | :white_circle: |
+| Instax Wide Evo | :heavy_check_mark: |
 
 
 ### Image sizes accepted by the printers
@@ -41,12 +36,14 @@ The image send to the printer should be a JPEG at a specific image size, dependi
 | Instax Mini Link 2 | 600 x 800px (a guess) | " |
 | Instax Mini LiPlay | 600 x 800px (a guess) | " |
 | Instax Square Link | 800 x 800px | " |
-| Instax Square Wide | 1260 x 840px | " |
+| Instax Wide Link | 1260 x 840px | " |
+| Instax Mini Evo | 600 x 800px (a guess) | " |
+| Instax Wide Evo | 1260 x 840px | " |
 
 ### Installing and running
 
     # Clone the repo
-    git clone https://github.com/javl/InstaxBLE.git
+    git clone https://github.com/marcin-sielski/InstaxBLE.git
     cd InstaxBLE
 
     # create a virtual environment and install the needed dependencies
@@ -55,7 +52,7 @@ The image send to the printer should be a JPEG at a specific image size, dependi
     pip install -r requirements.txt
 
     # Run the example
-    python3 instax-ble.py
+    python3 InstaxBle.py
 
 
 ### Useful to know
