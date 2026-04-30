@@ -8,10 +8,7 @@ This module can be used to control your Instax bluetooth printer (**Mini**, **Sq
 
 Did you find this script useful? Feel free to support my open source software:
 
-[![GitHub Sponsor](https://img.shields.io/github/sponsors/javl?label=Sponsor&logo=GitHub)](https://github.com/sponsors/javl)
-
-[![BMC](https://www.buymeacoffee.com/assets/img/custom_images/white_img.png)](https://www.buymeacoffee.com/javl)
-
+[![GitHub Sponsor](https://img.shields.io/badge/_-sponsor_on_Github-blue?logo=github)](https://github.com/sponsors/javl) [![BMC](https://img.shields.io/badge/Buy_Me_a_Coffee-orange?logo=buymeacoffee)](https://www.buymeacoffee.com/javl)
 
 ### Alternatives
 Don't need a whole Python script and just want to print? These projects based on InstaxBLE might be for you:
