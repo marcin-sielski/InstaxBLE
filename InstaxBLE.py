@@ -20,7 +20,7 @@ import simplepyble
 import sys
 from PIL import Image
 from io import BytesIO
-from threading import Lock
+from threading import Event
 
 class InstaxBLE:
     def __init__(
@@ -63,7 +63,7 @@ class InstaxBLE:
         self.imageSize = (PrinterSettings['mini']['width'], PrinterSettings['mini']['height']) if self.dummyPrinter else (0, 0)
         self.waitingForResponse = False
         self.cancelled = False
-        self.lock = Lock()
+        self._print_done = Event()
         self.packets = 0
         self.fileSize = 0
 
@@ -101,7 +101,7 @@ class InstaxBLE:
         print(f"Battery level:       {self.batteryPercentage}%")
         print(f"Charging:            {self.isCharging}")
         print(f"Required image size: {self.printerSettings['width']}x{self.printerSettings['height']}px")
-        if self.peripheral.mtu:
+        if self.peripheral and hasattr(self.peripheral, 'mtu') and self.peripheral.mtu:
             print(f"MTU:                 {self.peripheral.mtu()}")
         print("")
 
@@ -162,11 +162,11 @@ class InstaxBLE:
             self.handle_image_packet_queue()
 
         elif event == EventType.PRINT_IMAGE_DOWNLOAD_CANCEL:
-            self.lock.release()
+            self._print_done.set()
 
         elif event == EventType.PRINT_IMAGE:
             self.log('received print confirmation')
-            self.lock.release()
+            self._print_done.set()
 
         else:
             self.log(f'Uncaught response from printer. Eventype: {event}')
@@ -207,10 +207,11 @@ class InstaxBLE:
 
         self.parse_printer_response(event, packet)
 
-    def connect(self, timeout=0):
-        """ Connect to the printer. Stops trying after <timeout> seconds. """
+    def connect(self, timeout=0) -> bool:
+        """ Connect to the printer. Stops trying after <timeout> seconds.
+            Returns True if fully connected and ready, False otherwise. """
         if self.dummyPrinter:
-            return
+            return True
 
         self.peripheral = self.find_device(timeout=timeout)
         if self.peripheral:
@@ -220,6 +221,7 @@ class InstaxBLE:
             except Exception as e:
                 if not self.quiet:
                     self.log(f'error on connecting: {e}')
+                return False
 
             if self.peripheral.is_connected():
                 # check if we're using a version of simplepyble that supports reading mtu
@@ -231,11 +233,14 @@ class InstaxBLE:
                 except Exception as e:
                     if not self.quiet:
                         self.log(f'Error on attaching notification_handler: {e}')
-                        return
+                    self.disconnect()
+                    return False
 
                 self.get_printer_info()
                 sleep(1)
                 self.display_current_status()
+                return True
+        return False
 
     def disconnect(self):
         """ Disconnect from the printer (if connected) """
@@ -311,7 +316,7 @@ class InstaxBLE:
             speed: time per frame/color: higher is slower animation
             repeat: 0 = don't repeat (so play once), 1-254 = times to repeat, 255 = repeat forever
             when: 0 = normal, 1 = on print, 2 = on print completion, 3 = pattern switch """
-        if self.peripheral.identifier().endswith('(BLE)'):
+        if not self.peripheral or self.peripheral.identifier().endswith('(BLE)'):
             return
         payload = self.create_color_payload(pattern, speed, repeat, when)
         packet = self.create_packet(EventType.LED_PATTERN_SETTINGS, payload)
@@ -429,7 +434,7 @@ class InstaxBLE:
         self.packets = len(self.packetsForPrinting)
         if not self.dummyPrinter:
             packet = self.packetsForPrinting.pop(0)
-            self.lock.acquire()
+            self._print_done.clear()
             self.send_packet(packet)
             # try:
             #     while len(self.packetsForPrinting) > 0:
@@ -441,6 +446,8 @@ class InstaxBLE:
 
     def print_services(self):
         """ Get and display and overview of the printer's services and characteristics """
+        if not self.peripheral:
+            return
         self.log("Successfully connected, listing services...")
         services = self.peripheral.services()
         service_characteristic_pair = []
@@ -520,15 +527,16 @@ class InstaxBLE:
 
         return bytearray(img_buffer.getvalue())
 
-    def wait_until_image_is_printed(self):
-        """ Wait until image is printed  """
+    def wait_until_image_is_printed(self, timeout: float = 300.0) -> bool:
+        """ Wait until image is printed. Returns False if timed out (e.g. printer disconnected). """
         if not self.quiet:
             print("Waiting until image is printed...")
         if not self.dummyPrinter:
-            try:
-                self.lock.acquire()
-            except KeyboardInterrupt:
-                self.lock.release()
+            completed = self._print_done.wait(timeout=timeout)
+            if not completed and not self.quiet:
+                print("Warning: timed out waiting for print confirmation")
+            return completed
+        return True
 
 
 def main(args={}):
@@ -541,7 +549,8 @@ def main(args={}):
         # this script
 
         # instax.enable_printing()
-        instax.connect()
+        if not instax.connect():
+            return
         # Set a rainbow effect to be shown while printing and a pulsating
         # green effect when printing is done
         instax.send_led_pattern(LedPatterns.rainbow, when=1)
