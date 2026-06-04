@@ -6,8 +6,11 @@
 
 This module can be used to control your Instax bluetooth printer (**Mini**, **Square** and **Wide**) from Python. Create an issue if you run into any trouble, but please read the rest of this readme first.
 
-Don't need a whole Python script and just want to print? [This website](https://instax-link-web.vercel.app/) based on InstaxBLE lets you print to your Instax printer straight from your browser (repo [over here](https://github.com/linssenste/instax-link-web)).
-
+### Alternatives
+Don't need a whole Python script and just want to print? These projects based on InstaxBLE might be for you:
+* [This website](https://instax-link-web.vercel.app/) ([repo](https://github.com/linssenste/instax-link-web)) based on InstaxBLE lets you print to your Instax printer straight from your browser.
+* [InstantLink](https://github.com/wu-hongjun/InstantLink) is a MacOS application for printing straight from your Mac.
+ 
 ### Supported printer models
 This script has been tested with the Instax Mini Link, Instax Square Link and Instax Wide Link. I'm unsure about the other bluetooth models; if you have a different model please let met know if this code works for you. If needed you can find some info on recording the bluetooth data between your phone and the printer [here (Android)](https://github.com/javl/InstaxBLE/issues/4#issuecomment-1484123671) and [here (IOS)](https://github.com/jpwsutton/instax_api/issues/21#issuecomment-751651250). The IOS logs are strongly prefered as Android uses a slightly different way of communicating.
 
