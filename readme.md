@@ -1,14 +1,10 @@
 # Instax-BLE
 
-<img align="right" style="margin:10px" src="https://github.com/javl/Instax-Bluetooth/blob/main/instax-bluetooth.gif?raw=true">
+<img align="right" style="margin:10px" src="https://github.com/marcin-sielski/Instax-Bluetooth/blob/main/instax-bluetooth.gif?raw=true">
 
 ## Control your Instax Link printer from Python
 
 This module can be used to control your Instax bluetooth printer (**Mini**, **Square** and **Wide**) from Python. Create an issue if you run into any trouble, but please read the rest of this readme first.
-
-Did you find this script useful? Feel free to support my open source software:
-
-[![GitHub Sponsor](https://img.shields.io/badge/_-sponsor_on_Github-blue?logo=github)](https://github.com/sponsors/javl) [![BMC](https://img.shields.io/badge/Buy_Me_a_Coffee-orange?logo=buymeacoffee)](https://www.buymeacoffee.com/javl)
 
 ### Alternatives
 Don't need a whole Python script and just want to print? These projects based on InstaxBLE might be for you:
@@ -29,24 +25,28 @@ Do you have an older **WIFI** printer instead? Try [Instax-api](https://github.c
 | Instax Mini Link 2 | :white_circle: |
 | Instax Mini LiPlay | :heavy_check_mark: |
 | Instax Square Link | :heavy_check_mark: |
-| Instax Square Wide | :heavy_check_mark: |
+| Instax Wide Link | :heavy_check_mark: |
+| Instax Mini Evo | :white_circle: |
+| Instax Wide Evo | :heavy_check_mark: |
 
 
 ### Image sizes accepted by the printers
 The image send to the printer should be a JPEG at a specific image size, depending on the printer model. This script will automatically convert, resize and reduce quality to match the required specifications. This will work fine for most images, but if you want to prepare them manually you can use the info below:
 
-| Model | Image size | File size |
-| --- | --- | --- |
-| Instax Mini Link | 600 x 800px | 105KB |
-| Instax Mini Link 2 | 600 x 800px (a guess) | " |
-| Instax Mini LiPlay | 600 x 800px (a guess) | " |
-| Instax Square Link | 800 x 800px | " |
-| Instax Square Wide | 1260 x 840px | " |
+| Model | Image size |
+| --- | --- |
+| Instax Mini Link | 600 x 800px |
+| Instax Mini Link 2 | 600 x 800px (a guess) |
+| Instax Mini LiPlay | 600 x 800px (a guess) |
+| Instax Square Link | 800 x 800px |
+| Instax Wide Link | 1260 x 840px |
+| Instax Mini Evo | 600 x 800px (a guess) |
+| Instax Wide Evo | 1260 x 840px |
 
 ### Installing and running
 
     # Clone the repo
-    git clone https://github.com/javl/InstaxBLE.git
+    git clone https://github.com/marcin-sielski/InstaxBLE.git
     cd InstaxBLE
 
     # create a virtual environment and install the needed dependencies
@@ -55,7 +55,7 @@ The image send to the printer should be a JPEG at a specific image size, dependi
     pip install -r requirements.txt
 
     # Run the example
-    python3 instax-ble.py
+    python3 InstaxBle.py
 
 
 ### Useful to know
@@ -67,7 +67,7 @@ By default the `instax.print_image()` method will send all data to the printer _
     instax.connect()
     instax.enable_printing()  # allow printing
     instax.print_image('image.jpg')  # print image
-    instax.wait_one_minute()  # hacky way of preventing disconnecting too soon
+    instax.wait_until_image_is_printed()
     instax.disconnect()  # all done, disconnect
 
 or
@@ -75,7 +75,7 @@ or
     instax = InstaxBLE(print_enabled=True)  # enable printing at initialization
     instax.connect()
     instax.print_image('image.jpg')  # print image
-    instax.wait_one_minute()  # hacky way of preventing disconnecting too soon
+    instax.wait_until_image_is_printed()
     instax.disconnect()  # all done, disconnect
 
 #### 2. Connecting to a specific printer
@@ -98,7 +98,7 @@ It's recommended to wrap your code inside a `try / except / finally` loop so you
             instax.connect()
             instax.enable_printing()
             instax.print_image('image.jpg')
-            instax.wait_one_minute()
+            instax.wait_until_image_is_printed()
         except Exception as e:
             print(e)
         finally:
@@ -131,11 +131,10 @@ Some of these options have already been explored in other branches, but I need t
 #### Image enhancements:
 I'm not sure what happens when you send a different filetype or image in landscape orientation, but assuming those will fail:
 - :heavy_check_mark: Resize if image too small or too large (actual size depending on printer model)
-- :heavy_check_mark: Resize if file size too large (max 65535 bytes)
 - :white_large_square: Auto rotate image to portrait before sending
 - :heavy_check_mark: Convert to jpg if given a different filetype
 - :heavy_check_mark: Strip exif data to decrease filesize
-- :heavy_check_mark: Automatically lower the quality of the image to keep images below the ~~65535 bytes (0xFF 0xFF)~~ 105KB file limit
+- :heavy_check_mark: Automatically lower the quality of the image to keep images below supported file size limit
 
 
 #### Credit

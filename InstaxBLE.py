@@ -20,13 +20,14 @@ import simplepyble
 import sys
 from PIL import Image
 from io import BytesIO
-
+from threading import Event
 
 class InstaxBLE:
     def __init__(
         self,
-        device_address=None,
-        device_name=None,
+        adapter=None,
+        mac_address=None,
+        name=None,
         print_enabled=False,
         dummy_printer=False,
         verbose=False,
@@ -48,8 +49,9 @@ class InstaxBLE:
         self.printerSettings = PrinterSettings['mini'] if self.dummyPrinter else None
         self.chunkSize = PrinterSettings['mini']['chunkSize'] if self.dummyPrinter else 0
         self.printEnabled = print_enabled
-        self.deviceName = device_name.upper() if device_name else None
-        self.deviceAddress = device_address.upper() if device_address else None
+        self.device = adapter.lower() if adapter else None
+        self.deviceName = name.upper() if name else None
+        self.deviceAddress = mac_address.upper() if mac_address else None
         self.image_path = image_path
         self.verbose = verbose if not self.quiet else False
         self.packetsForPrinting = []
@@ -61,6 +63,9 @@ class InstaxBLE:
         self.imageSize = (PrinterSettings['mini']['width'], PrinterSettings['mini']['height']) if self.dummyPrinter else (0, 0)
         self.waitingForResponse = False
         self.cancelled = False
+        self._print_done = Event()
+        self.packets = 0
+        self.fileSize = 0
 
         adapters = simplepyble.Adapter.get_adapters()
         if len(adapters) == 0:
@@ -69,10 +74,18 @@ class InstaxBLE:
             else:
                 sys.exit()
 
+        number = 0
         if len(adapters) > 1:
             self.log(f"Found multiple adapters: {', '.join([adapter.identifier() for adapter in adapters])}")
-            self.log(f"Using the first one: {adapters[0].identifier()}")
-        self.adapter = adapters[0]
+            if self.device is None:
+                self.log(f"Using the first one: {adapters[0].identifier()}")
+            else:
+                for i in range(len(adapters)):
+                    if adapters[i].identifier() == self.device:
+                        number = i
+                        break
+                self.log(f"Using: {adapters[number].identifier()}")
+        self.adapter = adapters[number]
 
     def log(self, msg):
         """ Print a debug message"""
@@ -88,7 +101,7 @@ class InstaxBLE:
         print(f"Battery level:       {self.batteryPercentage}%")
         print(f"Charging:            {self.isCharging}")
         print(f"Required image size: {self.printerSettings['width']}x{self.printerSettings['height']}px")
-        if self.peripheral.mtu:
+        if self.peripheral and hasattr(self.peripheral, 'mtu') and self.peripheral.mtu:
             print(f"MTU:                 {self.peripheral.mtu()}")
         print("")
 
@@ -124,6 +137,7 @@ class InstaxBLE:
                     exit(f'Unknown image size from printer: {w}x{h}')
 
                 self.chunkSize = self.printerSettings['chunkSize']
+                self.fileSize = int(float(unpack_from('>I',packet[14:18])[0])/1024)
 
             elif infoType == InfoType.BATTERY_INFO:
                 self.batteryState, self.batteryPercentage = unpack_from('>BB', packet[8:10])
@@ -148,11 +162,11 @@ class InstaxBLE:
             self.handle_image_packet_queue()
 
         elif event == EventType.PRINT_IMAGE_DOWNLOAD_CANCEL:
-            pass
+            self._print_done.set()
 
         elif event == EventType.PRINT_IMAGE:
             self.log('received print confirmation')
-            pass
+            self._print_done.set()
 
         else:
             self.log(f'Uncaught response from printer. Eventype: {event}')
@@ -161,6 +175,8 @@ class InstaxBLE:
         if len(self.packetsForPrinting) > 0 and not self.cancelled:
             if len(self.packetsForPrinting) % 10 == 0:
                 self.log(f"Img packets left to send: {len(self.packetsForPrinting)}")
+                sys.stdout.write("Printing progress: %d%%   \r" % ((self.packets-len(self.packetsForPrinting))*100/self.packets))
+                sys.stdout.flush()
             packet = self.packetsForPrinting.pop(0)
             self.send_packet(packet)
 
@@ -191,10 +207,11 @@ class InstaxBLE:
 
         self.parse_printer_response(event, packet)
 
-    def connect(self, timeout=0):
-        """ Connect to the printer. Stops trying after <timeout> seconds. """
+    def connect(self, timeout=0) -> bool:
+        """ Connect to the printer. Stops trying after <timeout> seconds.
+            Returns True if fully connected and ready, False otherwise. """
         if self.dummyPrinter:
-            return
+            return True
 
         self.peripheral = self.find_device(timeout=timeout)
         if self.peripheral:
@@ -204,6 +221,7 @@ class InstaxBLE:
             except Exception as e:
                 if not self.quiet:
                     self.log(f'error on connecting: {e}')
+                return False
 
             if self.peripheral.is_connected():
                 # check if we're using a version of simplepyble that supports reading mtu
@@ -215,11 +233,14 @@ class InstaxBLE:
                 except Exception as e:
                     if not self.quiet:
                         self.log(f'Error on attaching notification_handler: {e}')
-                        return
+                    self.disconnect()
+                    return False
 
                 self.get_printer_info()
                 sleep(1)
                 self.display_current_status()
+                return True
+        return False
 
     def disconnect(self):
         """ Disconnect from the printer (if connected) """
@@ -236,6 +257,7 @@ class InstaxBLE:
 
     def cancel_print(self):
         self.packetsForPrinting = []
+        self.packets = 0
         self.waitingForResponse = False
         self.send_packet(self.create_packet(EventType.PRINT_IMAGE_DOWNLOAD_CANCEL))
 
@@ -263,7 +285,8 @@ class InstaxBLE:
                     if (self.deviceName and foundName.startswith(self.deviceName)) or \
                        (self.deviceAddress and foundAddress == self.deviceAddress) or \
                        (self.deviceName is None and self.deviceAddress is None and
-                       foundName.startswith('INSTAX-') and foundName.endswith('(IOS)')):
+                       foundName.startswith('INSTAX-') and (foundName.endswith('(IOS)') or \
+                       foundName.endswith('(BLE)'))):
                         # if foundAddress.startswith('FA:AB:BC'):  # start of IOS endpooint
                         #     to convert to ANDROID endpoint, replace 'FA:AB:BC' with '88:B4:36')
                         if peripheral.is_connectable():
@@ -293,6 +316,8 @@ class InstaxBLE:
             speed: time per frame/color: higher is slower animation
             repeat: 0 = don't repeat (so play once), 1-254 = times to repeat, 255 = repeat forever
             when: 0 = normal, 1 = on print, 2 = on print completion, 3 = pattern switch """
+        if not self.peripheral or self.peripheral.identifier().endswith('(BLE)'):
+            return
         payload = self.create_color_payload(pattern, speed, repeat, when)
         packet = self.create_packet(EventType.LED_PATTERN_SETTINGS, payload)
         self.send_packet(packet)
@@ -373,11 +398,11 @@ class InstaxBLE:
         imgData = imgSrc
         if isinstance(imgSrc, str):  # if it's a path, load the image contents
             image = Image.open(imgSrc)
-            imgData = self.pil_image_to_bytes(image, max_size_kb=105)
+            imgData = self.pil_image_to_bytes(image, max_size_kb=self.fileSize)
         elif isinstance(imgSrc, BytesIO):
             imgSrc.seek(0)  # Go to the start of the BytesIO object
             image = Image.open(imgSrc)
-            imgData = self.pil_image_to_bytes(image, max_size_kb=105)
+            imgData = self.pil_image_to_bytes(image, max_size_kb=self.fileSize)
 
         # self.log(f"len of imagedata: {len(imgData)}")
         self.packetsForPrinting = [
@@ -407,8 +432,10 @@ class InstaxBLE:
         #     self.log(self.prettify_bytearray(packet))
         # exit()
         # send the first packet from our list, the packet handler will take care of the rest
+        self.packets = len(self.packetsForPrinting)
         if not self.dummyPrinter:
             packet = self.packetsForPrinting.pop(0)
+            self._print_done.clear()
             self.send_packet(packet)
             # try:
             #     while len(self.packetsForPrinting) > 0:
@@ -420,6 +447,8 @@ class InstaxBLE:
 
     def print_services(self):
         """ Get and display and overview of the printer's services and characteristics """
+        if not self.peripheral:
+            return
         self.log("Successfully connected, listing services...")
         services = self.peripheral.services()
         service_characteristic_pair = []
@@ -464,6 +493,7 @@ class InstaxBLE:
         img = img.resize(self.imageSize, Image.Resampling.LANCZOS)
 
         def save_img_with_quality(quality):
+            img_buffer.truncate(0)
             img_buffer.seek(0)
             img_buffer.truncate(0)
             img.save(img_buffer, format='JPEG', quality=quality)
@@ -499,11 +529,16 @@ class InstaxBLE:
 
         return bytearray(img_buffer.getvalue())
 
-    def wait_one_minute(self):
-        """ Wait for one minute. Hacky way of preventing disconnecting too soon """
+    def wait_until_image_is_printed(self, timeout: float = 300.0) -> bool:
+        """ Wait until image is printed. Returns False if timed out (e.g. printer disconnected). """
         if not self.quiet:
-            print("Waiting for one minute...")
-        sleep(60)
+            print("Waiting until image is printed...")
+        if not self.dummyPrinter:
+            completed = self._print_done.wait(timeout=timeout)
+            if not completed and not self.quiet:
+                print("Warning: timed out waiting for print confirmation")
+            return completed
+        return True
 
 
 def main(args={}):
@@ -516,7 +551,8 @@ def main(args={}):
         # this script
 
         # instax.enable_printing()
-        instax.connect()
+        if not instax.connect():
+            return
         # Set a rainbow effect to be shown while printing and a pulsating
         # green effect when printing is done
         instax.send_led_pattern(LedPatterns.rainbow, when=1)
@@ -533,7 +569,7 @@ def main(args={}):
             instax.print_image(instax.image_path)
         else:
             instax.print_image(instax.printerSettings['exampleImage'])
-        instax.wait_one_minute()
+        instax.wait_until_image_is_printed()
 
     except Exception as e:
         print(type(e).__name__, __file__, e.__traceback__.tb_lineno)
@@ -545,8 +581,9 @@ def main(args={}):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('-a', '--device-address')
-    parser.add_argument('-n', '--device-name')
+    parser.add_argument('-a', '--adapter')
+    parser.add_argument('-m', '--mac-address')
+    parser.add_argument('-n', '--name')
     parser.add_argument('-p', '--print-enabled', action='store_true')
     parser.add_argument('-d', '--dummy-printer', action='store_true')
     parser.add_argument('-v', '--verbose', action='store_true')
