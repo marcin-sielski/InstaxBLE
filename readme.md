@@ -131,7 +131,7 @@ Some of these options have already been explored in other branches, but I need t
 #### Image enhancements:
 I'm not sure what happens when you send a different filetype or image in landscape orientation, but assuming those will fail:
 - :heavy_check_mark: Resize if image too small or too large (actual size depending on printer model)
-- :white_large_square: Auto rotate image to portrait before sending
+- :heavy_check_mark: Auto rotate image to portrait before sending
 - :heavy_check_mark: Convert to jpg if given a different filetype
 - :heavy_check_mark: Strip exif data to decrease filesize
 - :heavy_check_mark: Automatically lower the quality of the image to keep images below supported file size limit
