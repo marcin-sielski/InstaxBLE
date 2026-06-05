@@ -19,33 +19,51 @@ Imgproc_COLOR_RGB2YUV_YV12 = 131
 Imgproc_COLOR_BGR2YUV_YV12 = 132
 
 PrinterSettings = {
-    'mini': {
-        'modelName': 'Instax Mini Link',
-        'chunkSize': 900,
-        'exampleImage': 'example-mini.jpg',
-        'width': 600,
-        'height': 800
+    'link': {
+        'mini': {
+            'modelName': 'Instax Mini Link',
+            'chunkSize': 900,
+            'exampleImage': 'example-mini.jpg',
+            'width': 600,
+            'height': 800
+        },
+        'square': {
+            'modelName': 'Instax Square Link',
+            'chunkSize': 1808,
+            'exampleImage': 'example-square.jpg',
+            'width': 800,
+            'height': 800
+        },
+        'wide': {
+            'modelName': 'Instax Wide Link',
+            'chunkSize': 1808,
+            'exampleImage': 'example-wide.jpg',
+            'width': 1260,
+            'height': 840
+        }
     },
-    'square': {
-        'modelName': 'Instax Square Link',
-        'chunkSize': 1808,
-        'exampleImage': 'example-square.jpg',
-        'width': 800,
-        'height': 800
-    },
-    'wide': {
-        'modelName': 'Instax Wide Link',
-        'chunkSize': 9749,
-        'exampleImage': 'example-wide.jpg',
-        'width': 1260,
-        'height': 840
-    },
-    'dummy': {
-        'modelName': 'Dummy Printer',
-        'chunkSize': 123,
-        'exampleImage': 'example-mini.jpg',
-        'width': 10,
-        'height': 20
+    'evo': {
+        'mini': {
+            'modelName': 'Instax Mini Evo',
+            'chunkSize': 900, # unconfirmed
+            'exampleImage': 'example-mini.jpg',
+            'width': 600,
+            'height': 800
+        },
+        'square': {
+            'modelName': 'Instax Square Evo', # non exsting model
+            'chunkSize': 1808, # unconfirmed
+            'exampleImage': 'example-square.jpg',
+            'width': 800,
+            'height': 800
+        },
+        'wide': {
+            'modelName': 'Instax Wide Evo',
+            'chunkSize': 9749, # size from packet[14:18] according to https://github.com/javl/InstaxBLE/issues/18
+            'exampleImage': 'example-wide.jpg',
+            'width': 1260,
+            'height': 840
+        }
     }
 }
 
