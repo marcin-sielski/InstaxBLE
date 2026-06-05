@@ -24,7 +24,7 @@ from threading import Event
 from datetime import datetime
 
 class InstaxBLE:
-    _SECONDS_PER_BLE_WRITE = 0.070   # measured 0.059 s/write on Wide Link; 0.070 adds ~19% safety margin
+    _SECONDS_PER_BLE_WRITE = 0.2     # measured 0.069 s/write at 0.5m, 0.096 s/write at 2.8m (Wide Evo)
     _PRINT_OVERHEAD = 30.0           # measured: ~26 s for last batch + ejection on Wide Link
 
     def __init__(
@@ -502,12 +502,35 @@ class InstaxBLE:
         """ Convert a PIL image to a bytearray """
         img_buffer = BytesIO()
 
-        # Convert the image to RGB mode if it's in RGBA mode
-        if img.mode == 'RGBA':
+        # Convert the image to RGB mode if it's not already (e.g. RGBA, L, P, CMYK)
+        if img.mode != 'RGB':
             img = img.convert('RGB')
 
-        # Resize the image to <imageSize> pixels
-        img = img.resize(self.imageSize, Image.Resampling.LANCZOS)
+        # Rotate image to match printer orientation (skip for square printers)
+        target_w, target_h = self.imageSize
+        if target_w != target_h and (target_w > target_h) != (img.width > img.height):
+            img = img.rotate(-90, expand=True)
+
+        # Scale to fill the physical print area (cover mode), then pad hidden strips with white
+        top_strip = self.printerSettings['topStrip']
+        bottom_strip = self.printerSettings['bottomStrip']
+        physical_h = target_h - top_strip - bottom_strip
+        src_ar = img.width / img.height
+        phys_ar = target_w / physical_h
+        if src_ar >= phys_ar:
+            new_w = round(physical_h * src_ar)
+            new_h = physical_h
+        else:
+            new_w = target_w
+            new_h = round(target_w / src_ar)
+        img = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
+        left = (new_w - target_w) // 2
+        top = (new_h - physical_h) // 2
+        img = img.crop((left, top, left + target_w, top + physical_h))
+        if top_strip > 0 or bottom_strip > 0:
+            canvas = Image.new('RGB', (target_w, target_h), (255, 255, 255))
+            canvas.paste(img, (0, top_strip))
+            img = canvas
 
         def save_img_with_quality(quality):
             img_buffer.seek(0)

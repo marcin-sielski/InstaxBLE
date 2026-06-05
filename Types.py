@@ -25,21 +25,27 @@ PrinterSettings = {
             'chunkSize': 900,
             'exampleImage': 'example-mini.jpg',
             'width': 600,
-            'height': 800
+            'height': 800,
+            'topStrip': 0,
+            'bottomStrip': 0
         },
         'square': {
             'modelName': 'Instax Square Link',
             'chunkSize': 1808,
             'exampleImage': 'example-square.jpg',
             'width': 800,
-            'height': 800
+            'height': 800,
+            'topStrip': 0,
+            'bottomStrip': 0
         },
         'wide': {
             'modelName': 'Instax Wide Link',
             'chunkSize': 1808,
             'exampleImage': 'example-wide.jpg',
             'width': 1260,
-            'height': 840
+            'height': 840,
+            'topStrip': 35,
+            'bottomStrip': 18
         }
     },
     'evo': {
@@ -48,21 +54,27 @@ PrinterSettings = {
             'chunkSize': 900, # unconfirmed
             'exampleImage': 'example-mini.jpg',
             'width': 600,
-            'height': 800
+            'height': 800,
+            'topStrip': 0,
+            'bottomStrip': 0
         },
         'square': {
             'modelName': 'Instax Square Evo', # non exsting model
             'chunkSize': 1808, # unconfirmed
             'exampleImage': 'example-square.jpg',
             'width': 800,
-            'height': 800
+            'height': 800,
+            'topStrip': 0,
+            'bottomStrip': 0
         },
         'wide': {
             'modelName': 'Instax Wide Evo',
             'chunkSize': 9749, # size from packet[14:18] according to https://github.com/javl/InstaxBLE/issues/18
             'exampleImage': 'example-wide.jpg',
             'width': 1260,
-            'height': 840
+            'height': 840,
+            'topStrip': 35,
+            'bottomStrip': 18
         }
     }
 }
