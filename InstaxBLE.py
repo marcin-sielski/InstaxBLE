@@ -24,7 +24,7 @@ from threading import Event
 from datetime import datetime
 
 class InstaxBLE:
-    _SECONDS_PER_BLE_WRITE = 0.2     # measured 0.069 s/write at 0.5m, 0.096 s/write at 2.8m (Wide Evo)
+    _SECONDS_PER_BLE_WRITE = 0.2     # measured avg 0.099 s/write at 2.8m, peak 0.123 (Wide Evo); 0.2 adds ~1.6x margin
     _PRINT_OVERHEAD = 30.0           # measured: ~26 s for last batch + ejection on Wide Link
 
     def __init__(
