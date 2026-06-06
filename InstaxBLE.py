@@ -507,7 +507,12 @@ class InstaxBLE:
 
         # Convert the image to RGB mode if it's not already (e.g. RGBA, L, P, CMYK)
         if img.mode != 'RGB':
-            img = img.convert('RGB')
+            if img.mode in ('RGBA', 'LA', 'PA', 'RGBa', 'La'):
+                background = Image.new('RGB', img.size, (255, 255, 255))
+                background.paste(img, mask=img.convert('RGBA').split()[3])
+                img = background
+            else:
+                img = img.convert('RGB')
 
         # Rotate image to match printer orientation (skip for square printers)
         target_w, target_h = self._image_size
