@@ -1,3 +1,4 @@
 Pillow==11.3.0
 pycodestyle==2.14.0
+pytest==9.0.3
 simplepyble==0.10.3

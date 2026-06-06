@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+from __future__ import annotations
+
 from math import ceil
 from struct import pack, unpack_from
 from time import sleep
@@ -24,11 +26,15 @@ from threading import Event
 from datetime import datetime
 
 class InstaxBLE:
-    _SECONDS_PER_BLE_WRITE = 0.2     # measured avg 0.099 s/write at 2.8m, peak 0.123 (Wide Evo); 0.2 adds ~1.6x margin
-    _PRINT_OVERHEAD = 30.0           # measured: ~26 s for last batch + ejection on Wide Link
-    _SERVICE_UUID     = '70954782-2d83-473d-9e5f-81e1d02d5273'
-    _WRITE_CHAR_UUID  = '70954783-2d83-473d-9e5f-81e1d02d5273'
-    _NOTIFY_CHAR_UUID = '70954784-2d83-473d-9e5f-81e1d02d5273'
+    _SECONDS_PER_BLE_WRITE  = 0.2                    # measured avg 0.099 s/write at 2.8m, peak 0.123 (Wide Evo); 0.2 adds ~1.6x margin
+    _PRINT_OVERHEAD         = 30.0                   # measured: ~26 s for last batch + ejection on Wide Link
+    _SERVICE_UUID           = '70954782-2d83-473d-9e5f-81e1d02d5273'
+    _WRITE_CHAR_UUID        = '70954783-2d83-473d-9e5f-81e1d02d5273'
+    _NOTIFY_CHAR_UUID       = '70954784-2d83-473d-9e5f-81e1d02d5273'
+    _PACKET_HEADER          = b'\x41\x62'            # 'Ab': client→printer direction marker
+    _PACKET_OVERHEAD        = 7                      # header(2) + length(2) + opcode(2) + checksum(1)
+    _PACKET_CHUNK_SIZE      = 182                    # BLE write chunk size (bytes)
+    _DOWNLOAD_START_PREFIX  = b'\x02\x00\x00\x00'   # pictureType, picturePrintOption × 2, zero
 
     def __init__(
         self,
@@ -104,7 +110,7 @@ class InstaxBLE:
         if not self._quiet:
             print(f'[{self._timestamp()}] {msg}')
 
-    def display_current_status(self):
+    def _display_current_status(self):
         """ Display an overview of the current printer state """
         print("\nPrinter details: ")
         # print(f"Device name:         {self._printer_settings['modelName']}")
@@ -149,7 +155,7 @@ class InstaxBLE:
                     exit(f'Unknown image size from printer: {w}x{h}')
 
                 self._chunk_size = self._printer_settings['chunkSize']
-                self._file_size = int(float(unpack_from('>I',packet[14:18])[0])/1024)
+                self._file_size = unpack_from('>I', packet[14:18])[0] // 1024
                 # self._log(f"Max file size for this printer: {self._file_size} KB")
 
             elif info_type == InfoType.BATTERY_INFO:
@@ -221,7 +227,7 @@ class InstaxBLE:
 
         self._parse_printer_response(event, packet)
 
-    def connect(self, timeout=0) -> bool:
+    def connect(self, timeout: int = 0) -> bool:
         """ Connect to the printer. Stops trying after <timeout> seconds.
             Returns True if fully connected and ready, False otherwise. """
         if self._dummy_printer:
@@ -252,11 +258,11 @@ class InstaxBLE:
 
                 self.get_printer_info()
                 sleep(1)
-                self.display_current_status()
+                self._display_current_status()
                 return True
         return False
 
-    def disconnect(self):
+    def disconnect(self) -> None:
         """ Disconnect from the printer (if connected) """
         if self._dummy_printer:
             return
@@ -269,17 +275,17 @@ class InstaxBLE:
                 self._peripheral.disconnect()
                 self._log("Disconnected")
 
-    def cancel_print(self):
+    def cancel_print(self) -> None:
         self._packets_for_printing = []
         self._packets = 0
         self._waiting_for_response = False
         self._send_packet(self._create_packet(EventType.PRINT_IMAGE_DOWNLOAD_CANCEL))
 
-    def enable_printing(self):
+    def enable_printing(self) -> None:
         """ Enable printing. """
         self._print_enabled = True
 
-    def disable_printing(self):
+    def disable_printing(self) -> None:
         """ Disable printing. """
         self._print_enabled = False
 
@@ -326,7 +332,7 @@ class InstaxBLE:
             payload += pack('BBB', color[0], color[1], color[2])
         return payload
 
-    def send_led_pattern(self, pattern, speed=5, repeat=255, when=0):
+    def send_led_pattern(self, pattern: list, speed: int = 5, repeat: int = 255, when: int = 0) -> None:
         """ Send a LED pattern to the Instax printer.
             color_array: array of BGR(!) values to use in animation, e.g. [[255, 0, 0], [0, 255, 0], [0, 0, 255]]
             speed: time per frame/color: higher is slower animation
@@ -342,19 +348,18 @@ class InstaxBLE:
         """ Helper funtion to convert a bytearray to a string of hex values. """
         return ' '.join([f'{x:02x}' for x in value])
 
-    def _create_checksum(self, bytearray):
+    def _create_checksum(self, data: bytes) -> int:
         """ Create a checksum for a given packet. """
-        return (255 - (sum(bytearray) & 255)) & 255
+        return (255 - (sum(data) & 255)) & 255
 
     def _create_packet(self, event_type, payload=b''):
         """ Create a packet to send to the printer. """
         if isinstance(event_type, EventType):  # allows passing in an event or a value directly
             event_type = event_type.value
 
-        header = b'\x41\x62'  # 'Ab' means client to printer, 'aB' means printer to client
-        opCode = bytes([event_type[0], event_type[1]])
-        packetSize = pack('>H', 7 + len(payload))
-        packet = header + packetSize + opCode + payload
+        op_code = bytes([event_type[0], event_type[1]])
+        packet_size = pack('>H', self._PACKET_OVERHEAD + len(payload))
+        packet = self._PACKET_HEADER + packet_size + op_code + payload
         packet += pack('B', self._create_checksum(packet))
         return packet
 
@@ -384,12 +389,11 @@ class InstaxBLE:
             # self._log(f'sending eventtype: {event}')
 
             self._waiting_for_response = True
-            small_packet_size = 182
-            num_parts = ceil(len(packet) / small_packet_size)
+            num_parts = ceil(len(packet) / self._PACKET_CHUNK_SIZE)
             # self._log(f"> number of parts to send: {num_parts}")
             for sub_part_index in range(num_parts):
                 # self._log((sub_part_index + 1), '/', num_parts)
-                sub_packet = packet[sub_part_index * small_packet_size:sub_part_index * small_packet_size + small_packet_size]
+                sub_packet = packet[sub_part_index * self._PACKET_CHUNK_SIZE:(sub_part_index + 1) * self._PACKET_CHUNK_SIZE]
 
                 if not self._dummy_printer:
                     self._peripheral.write_command(self._SERVICE_UUID, self._WRITE_CHAR_UUID, sub_packet)
@@ -399,9 +403,9 @@ class InstaxBLE:
             self.cancel_print()
             # sleep(1)
             self.disconnect()
-            sys.exit('Cancelled')
+            sys.exit(None if self._quiet else 'Cancelled')
 
-    def print_image(self, img_src):
+    def print_image(self, img_src: str | BytesIO) -> None:
         """
         print an image. Either pass a path to an image (as a string) or pass
         the bytearray to print directly
@@ -423,7 +427,7 @@ class InstaxBLE:
         # self._log(f"len of imagedata: {len(img_data)}")
         self._packets_for_printing = [
             # \x02\x00\x00\x00 payload made of four bytes: pictureType, picturePrintOption, picturePrintOption2, zero
-            self._create_packet(EventType.PRINT_IMAGE_DOWNLOAD_START, b'\x02\x00\x00\x00' + pack('>I', len(img_data)))
+            self._create_packet(EventType.PRINT_IMAGE_DOWNLOAD_START, self._DOWNLOAD_START_PREFIX + pack('>I', len(img_data)))
         ]
 
         # divide image data up into chunks of <chunkSize> bytes and pad the last chunk with zeroes if needed
@@ -440,7 +444,7 @@ class InstaxBLE:
 
         if self._print_enabled:
             self._packets_for_printing.append(self._create_packet(EventType.PRINT_IMAGE))
-            self._packets_for_printing.append(self._create_packet((0, 2), b'\x02'))
+            self._packets_for_printing.append(self._create_packet(EventType.SUPPORT_FUNCTION_INFO, b'\x02'))
         elif not self._quiet:
             self._log("Printing is disabled, sending all packets except the actual print command")
 
@@ -475,17 +479,17 @@ class InstaxBLE:
         for i, (service_uuid, characteristic) in enumerate(service_characteristic_pair):
             self._log(f"{i}: {service_uuid} {characteristic}")
 
-    def get_printer_orientation(self):
+    def get_printer_orientation(self) -> None:
         """ Get the current XYZ orientation of the printer """
         packet = self._create_packet(EventType.XYZ_AXIS_INFO)
         self._send_packet(packet)
 
-    def get_printer_status(self):
+    def get_printer_status(self) -> None:
         """ Get the printer's status"""
         packet = self._create_packet(EventType.SUPPORT_FUNCTION_INFO, pack('>B', InfoType.PRINTER_FUNCTION_INFO.value))
         self._send_packet(packet)
 
-    def get_printer_info(self):
+    def get_printer_info(self) -> None:
         """ Get and display the printer's status and info, like photos left and battery level """
         # self._log("Getting function info...")
 
@@ -558,31 +562,37 @@ class InstaxBLE:
 
                 current_quality = (low_quality + high_quality) // 2
                 closest_quality = current_quality
+            else:
+                save_img_with_quality(closest_quality)
 
-            # Save the image with the closest_quality
-            save_img_with_quality(closest_quality)
             self._log(f'Saved img with quality of {closest_quality}')
         else:
             img.save(img_buffer, format='JPEG')
 
         return bytearray(img_buffer.getvalue())
 
-    def wait_until_image_is_printed(self, timeout: float = None) -> bool:
+    def wait_until_image_is_printed(self, timeout: float | None = None) -> bool:
         """ Wait until image is printed. Returns False if timed out (e.g. printer disconnected).
             timeout: seconds to wait; if None, derived from queued packet count. """
         self._print("Waiting until image is printed...")
         if not self._dummy_printer:
             if timeout is None:
-                timeout = (self._file_size * 1024 / 182) * self._SECONDS_PER_BLE_WRITE + self._PRINT_OVERHEAD
-            completed = self._print_done.wait(timeout=timeout)
+                timeout = (self._file_size * 1024 / self._PACKET_CHUNK_SIZE) * self._SECONDS_PER_BLE_WRITE + self._PRINT_OVERHEAD
+            try:
+                completed = self._print_done.wait(timeout=timeout)
+            except KeyboardInterrupt:
+                self.disconnect()
+                sys.exit(None if self._quiet else 'Cancelled')
             if not completed:
                 self._print("Warning: timed out waiting for print confirmation")
             return completed
         return True
 
 
-def main(args={}):
+def main(args=None):
     """ Example usage of the InstaxBLE class """
+    if args is None:
+        args = {}
     instax = InstaxBLE(**args)
     try:
         # To prevent misprints during development this script sends all the
@@ -615,8 +625,8 @@ def main(args={}):
         print(type(e).__name__, __file__, e.__traceback__.tb_lineno)
         instax._log(f'Error: {e}')
     finally:
-        print('finally, disconnect')
         instax.disconnect()  # all done, disconnect
+        print('Disconnected, exiting.')
 
 
 if __name__ == '__main__':
